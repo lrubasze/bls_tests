@@ -1,0 +1,18 @@
+[package]
+name = "bls_test_rust"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+# Radix Engine deps
+scrypto = { git = "https://github.com/radixdlt/radixdlt-scrypto", branch = "feature/bls_signatures", features = ["serde"] }
+transaction = { git = "https://github.com/radixdlt/radixdlt-scrypto", branch = "feature/bls_signatures" }
+sbor = { git = "https://github.com/radixdlt/radixdlt-scrypto", branch = "feature/bls_signatures" }
+
+# CLI
+clap = { version = "4.4.11", features = ["derive"] }
+
+reqwest = { version = "0.11.22", features = ["blocking", "json"] }
+serde = { version = "1.0.193", features = ["derive"] }
+serde_json = { version = "1.0.108" }
+hex = { version = "0.4.3" }
