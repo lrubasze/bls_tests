@@ -8,6 +8,9 @@ pub fn create_notarized_transaction(
 ) -> (NotarizedTransactionV1, IntentHash) {
     let transaction = TransactionBuilder::new()
         .header(TransactionHeaderV1 {
+            // Below params are just for the test.
+            // They shall be adjusted with care and awareness.
+            // Eg. in production nonce mustn't be hardcoded.
             network_id: network_definition.id,
             start_epoch_inclusive: Epoch::of(epoch),
             end_epoch_exclusive: Epoch::of(epoch + 10),
