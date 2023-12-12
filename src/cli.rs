@@ -1,7 +1,6 @@
 use crate::gateway::*;
 use crate::utils::*;
 use clap::{Parser, Subcommand};
-use std::fs;
 use std::{thread, time};
 use transaction::prelude::*;
 
@@ -18,6 +17,12 @@ const CRYPTO_SCRYPTO_BLUEPRINT_NAME: &str = "CryptoScrypto";
 const CRYPTO_SCRYPTO_PACKAGE_ADDRESS: &str =
     "package_tdx_21_1pkt7zdllsneytdc9g60xn9jjhhwx7jaqxmeh58l4dwyx7rt5z9428f";
 
+const TEST_MSG: &str = "Hello World!";
+const _TEST_MSG_HASH: &str = "3ea2f1d0abf3fc66cf29eebb70cbd4e7fe762ef8a09bcc06c8edf641230afec0";
+// Below key is derived from secret key: 5B00CC8C7153F39EF2E6E2FADB1BB95A1F4BF21F43CC5B28EFA9E526FB788C08
+const TEST_PUB_KEY: &str = "8a38419cb83c15a92d11243384bea0acd15cbacc24b385b9c577b17272d6ad68bb53c52dbbf79324005528d2d73c2643";
+const TEST_SIGNATURE: &str = "82131f69b6699755f830e29d6ed41cbf759591a2ab598aa4e9686113341118d1db900d190436048601791121b5757c341045d4d0c94a95ec31a9ba6205f9b7504de85dadff52874375c58eec6cec28397279de87d5595101e398d31646d345bb";
+
 #[derive(Parser)]
 #[command(author, version, about, long_about = None)]
 #[command(propagate_version = true)]
@@ -30,16 +35,28 @@ struct Cli {
 enum Commands {
     GatewayStatus,
     KeccakHash(KeccakHash),
+    BlsVerify(BlsVerify),
 }
 
 #[derive(Debug, Parser)]
 struct KeccakHash {
-    #[arg(long, short, default_value_t = CRYPTO_SCRYPTO_PACKAGE_ADDRESS.to_string())]
+    #[arg(long, short = 'a', default_value_t = CRYPTO_SCRYPTO_PACKAGE_ADDRESS.to_string())]
     package_address: String,
-    #[arg(long, short)]
-    file_path: Option<String>,
-    #[arg(long, short)]
-    text: Option<String>,
+    #[arg(long, short, default_value_t = TEST_MSG.to_string())]
+    msg: String,
+}
+
+#[derive(Debug, Parser)]
+struct BlsVerify {
+    #[arg(long, short = 'a', default_value_t = CRYPTO_SCRYPTO_PACKAGE_ADDRESS.to_string())]
+    package_address: String,
+
+    #[arg(long, short, default_value_t = TEST_MSG.to_string())]
+    msg: String,
+    #[arg(long, short, default_value_t = TEST_PUB_KEY.to_string())]
+    public_key: String,
+    #[arg(long, short, default_value_t = TEST_SIGNATURE.to_string())]
+    signature: String,
 }
 
 struct CliCtx {
@@ -81,8 +98,12 @@ impl CliCtx {
     fn execute_transaction(&self, manifest: TransactionManifestV1) -> TransactionDetails {
         let current_epoch = self.gateway.current_epoch();
 
-        let (notarized_transaction, intent_hash) =
-            create_notarized_transaction(&self.network_definition, current_epoch, &self.private_key, manifest);
+        let (notarized_transaction, intent_hash) = create_notarized_transaction(
+            &self.network_definition,
+            current_epoch,
+            &self.private_key,
+            manifest,
+        );
 
         let _ = self.gateway.transaction_submit(notarized_transaction);
 
@@ -92,7 +113,7 @@ impl CliCtx {
         // Eg.
         //   txid_tdx_21_14a9mm2e3fxyyh02wrz4xsalyxszez6kpqfh0a488hp8wjdvv55cq3wfzv0
         let intent_hash = self.hash_encoder.encode(&intent_hash).unwrap();
-        println!("intent_hash: {}", intent_hash);
+        println!("intent_hash : {}", intent_hash);
 
         // Wait for transaction finish
         loop {
@@ -110,12 +131,9 @@ impl CliCtx {
         // Convert address from the human-readable bech32 format
         let package_address =
             PackageAddress::try_from_bech32(&self.address_decoder, &cmd.package_address).unwrap();
+        let data = cmd.msg.as_bytes().to_vec();
 
-        let data = match (&cmd.file_path, &cmd.text) {
-            (Some(path), _) => fs::read(path).unwrap(),
-            (None, Some(text)) => text.as_bytes().to_vec(),
-            (None, None) => panic!("No data given"),
-        };
+        println!("Message  : {}", cmd.msg);
 
         // Build manifest
         let manifest = ManifestBuilder::new()
@@ -140,8 +158,50 @@ impl CliCtx {
         // - then decode SBOR to the expected type
         let sbor_data = hex::decode(output).unwrap();
 
-        let h: Hash = scrypto_decode(&sbor_data).unwrap();
-        println!("hash = {:?}", h);
+        let hash: Hash = scrypto_decode(&sbor_data).unwrap();
+        println!("Message hash : {}", hash);
+    }
+
+    // Call CryptoScrypto package "bls12381_v1_verify" method to verify the signature
+    fn cmd_bls_verify(&self, cmd: &BlsVerify) {
+        // Convert address from the human-readable bech32 format
+        let package_address =
+            PackageAddress::try_from_bech32(&self.address_decoder, &cmd.package_address).unwrap();
+        let msg_hash = keccak256_hash(cmd.msg.clone());
+
+        println!("Message      : {}", cmd.msg);
+        println!("Message hash : {}", msg_hash);
+        println!("Publick key  : {}", cmd.public_key);
+        println!("Signature    : {}", cmd.signature);
+
+        let pub_key = Bls12381G1PublicKey::from_str(&cmd.public_key).unwrap();
+        let signature = Bls12381G2Signature::from_str(&cmd.signature).unwrap();
+
+        // Build manifest
+        let manifest = ManifestBuilder::new()
+            .lock_fee_from_faucet()
+            .call_function(
+                package_address,
+                CRYPTO_SCRYPTO_BLUEPRINT_NAME,
+                "bls12381_v1_verify",
+                manifest_args!(msg_hash.to_vec(), pub_key, signature),
+            )
+            .build();
+
+        let details = self.execute_transaction(manifest);
+        // Gateway returns the output of the called method in the second item of
+        // "transaction.receipt.output"
+        // more details: https://radix-babylon-gateway-api.redoc.ly/#operation/TransactionCommittedDetails
+        let output = details.get_output(1);
+
+        // The data is in an SBOR encode in hex string.
+        // We need to decode it:
+        // - first to raw SBOR (byte array)
+        // - then decode SBOR to the expected type
+        let sbor_data = hex::decode(output).unwrap();
+
+        let result: bool = scrypto_decode(&sbor_data).unwrap();
+        println!("BLS verify  : {:?}", result);
     }
 }
 
@@ -156,6 +216,9 @@ pub fn run() {
         }
         Commands::KeccakHash(cmd) => {
             ctx.cmd_keccak_hash(cmd);
+        }
+        Commands::BlsVerify(cmd) => {
+            ctx.cmd_bls_verify(cmd);
         }
     }
 }
