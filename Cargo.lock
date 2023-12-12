@@ -138,7 +138,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "bls_test_rust"
+name = "bls_for_supra"
 version = "0.1.0"
 dependencies = [
  "clap",

@@ -1,6 +1,6 @@
 use crate::gateway::*;
 use crate::utils::*;
-use clap::{Args, Parser, Subcommand};
+use clap::{Parser, Subcommand};
 use std::fs;
 use std::{thread, time};
 use transaction::prelude::*;

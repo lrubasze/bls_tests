@@ -1,5 +1,5 @@
 [package]
-name = "bls_test_rust"
+name = "bls_for_supra"
 version = "0.1.0"
 edition = "2021"
 
@@ -11,8 +11,9 @@ sbor = { git = "https://github.com/radixdlt/radixdlt-scrypto", branch = "feature
 
 # CLI
 clap = { version = "4.4.11", features = ["derive"] }
-
+# To communicate with gateway via HTTP REST API
 reqwest = { version = "0.11.22", features = ["blocking", "json"] }
+
 serde = { version = "1.0.193", features = ["derive"] }
 serde_json = { version = "1.0.108" }
 hex = { version = "0.4.3" }
