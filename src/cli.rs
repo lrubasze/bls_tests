@@ -30,8 +30,16 @@ const CRYPTO_SCRYPTO_RPD_PATH: &str = "crypto_scrypto/crypto_scrypto.rpd";
 const CRYPTO_SCRYPTO_METADATA: &str = "CryptoScrypto package for Supra";
 
 #[derive(Parser)]
-#[command(author, version, about, long_about = None)]
+#[command(author, version, about, long_about, verbatim_doc_comment)]
 #[command(propagate_version = true)]
+/// Simple CLI tool to demonstrate how to work with Scrypto blueprints using Rust language.
+///
+/// It communicates with the network via Gateway using HTTP REST API.
+/// It performs:
+/// - building transaction manifest for given command
+/// - signing the transaction
+/// - submitting the transaction to the network
+/// - getting the transaction output
 struct Cli {
     #[command(subcommand)]
     command: Commands,
@@ -39,29 +47,38 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
+    /// Get gateway status. This is sanity check, whether gateway is working fine.
     GatewayStatus,
+    /// Calculate Keccak256 hash over given message
     KeccakHash(KeccakHash),
+    /// Perform BLS verification over given message, public key and signature
     BlsVerify(BlsVerify),
+    /// Publish given WASM and RPD files as a package
     PublishPackage(PublishPackage),
 }
 
 #[derive(Debug, Parser)]
 struct KeccakHash {
     #[arg(long, short = 'a', default_value_t = CRYPTO_SCRYPTO_PACKAGE_ADDRESS.to_string())]
+    /// Package address of the CryptoScrypto blueprint
     package_address: String,
     #[arg(long, short, default_value_t = TEST_MSG.to_string())]
+    /// Message to hash
     msg: String,
 }
 
 #[derive(Debug, Parser)]
 struct BlsVerify {
     #[arg(long, short = 'a', default_value_t = CRYPTO_SCRYPTO_PACKAGE_ADDRESS.to_string())]
+    /// Package address of the CryptoScrypto blueprint
     package_address: String,
-
     #[arg(long, short, default_value_t = TEST_MSG.to_string())]
+    /// Message to verify signature with (it will be hashed before with Keccak256)
     msg: String,
     #[arg(long, short, default_value_t = TEST_PUB_KEY.to_string())]
+    /// BLS public key to perform verification (hex-encoded string)
     public_key: String,
+    /// BLS signature to verify (hex-encoded string)
     #[arg(long, short, default_value_t = TEST_SIGNATURE.to_string())]
     signature: String,
 }
@@ -69,10 +86,13 @@ struct BlsVerify {
 #[derive(Debug, Parser)]
 struct PublishPackage {
     #[arg(long, short, default_value_t = CRYPTO_SCRYPTO_CODE_PATH.to_string())]
+    /// Scrypto blueprint WASM file, output of 'scrypto build' command
     code_path: String,
     #[arg(long, short, default_value_t = CRYPTO_SCRYPTO_RPD_PATH.to_string())]
+    /// Scrypto blueprint package definition file, output of 'scrypto build' command
     rpd_path: String,
     #[arg(long, short, default_value_t = CRYPTO_SCRYPTO_METADATA.to_string())]
+    /// Package metadata to set for 'Description' key
     metadata: String,
 }
 
