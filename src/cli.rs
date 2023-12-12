@@ -1,6 +1,8 @@
 use crate::gateway::*;
 use crate::utils::*;
 use clap::{Parser, Subcommand};
+use scrypto::blueprints::package::PackageDefinition;
+use std::fs;
 use std::{thread, time};
 use transaction::prelude::*;
 
@@ -23,6 +25,10 @@ const _TEST_MSG_HASH: &str = "3ea2f1d0abf3fc66cf29eebb70cbd4e7fe762ef8a09bcc06c8
 const TEST_PUB_KEY: &str = "8a38419cb83c15a92d11243384bea0acd15cbacc24b385b9c577b17272d6ad68bb53c52dbbf79324005528d2d73c2643";
 const TEST_SIGNATURE: &str = "82131f69b6699755f830e29d6ed41cbf759591a2ab598aa4e9686113341118d1db900d190436048601791121b5757c341045d4d0c94a95ec31a9ba6205f9b7504de85dadff52874375c58eec6cec28397279de87d5595101e398d31646d345bb";
 
+const CRYPTO_SCRYPTO_CODE_PATH: &str = "crypto_scrypto/crypto_scrypto.wasm";
+const CRYPTO_SCRYPTO_RPD_PATH: &str = "crypto_scrypto/crypto_scrypto.rpd";
+const CRYPTO_SCRYPTO_METADATA: &str = "CryptoScrypto package for Supra";
+
 #[derive(Parser)]
 #[command(author, version, about, long_about = None)]
 #[command(propagate_version = true)]
@@ -36,6 +42,7 @@ enum Commands {
     GatewayStatus,
     KeccakHash(KeccakHash),
     BlsVerify(BlsVerify),
+    PublishPackage(PublishPackage),
 }
 
 #[derive(Debug, Parser)]
@@ -59,10 +66,21 @@ struct BlsVerify {
     signature: String,
 }
 
+#[derive(Debug, Parser)]
+struct PublishPackage {
+    #[arg(long, short, default_value_t = CRYPTO_SCRYPTO_CODE_PATH.to_string())]
+    code_path: String,
+    #[arg(long, short, default_value_t = CRYPTO_SCRYPTO_RPD_PATH.to_string())]
+    rpd_path: String,
+    #[arg(long, short, default_value_t = CRYPTO_SCRYPTO_METADATA.to_string())]
+    metadata: String,
+}
+
 struct CliCtx {
     gateway: GatewayApiClient,
     network_definition: NetworkDefinition,
     address_decoder: AddressBech32Decoder,
+    address_encoder: AddressBech32Encoder,
     hash_encoder: TransactionHashBech32Encoder,
     private_key: Secp256k1PrivateKey,
 }
@@ -76,6 +94,7 @@ impl CliCtx {
             hrp_suffix: String::from(NETWORK_HRP_SUFFIX),
         };
         let address_decoder = AddressBech32Decoder::new(&network_definition);
+        let address_encoder = AddressBech32Encoder::new(&network_definition);
         let hash_encoder = TransactionHashBech32Encoder::new(&network_definition);
 
         // Key must be generated randomly.
@@ -85,6 +104,7 @@ impl CliCtx {
             gateway,
             network_definition,
             address_decoder,
+            address_encoder,
             hash_encoder,
             private_key,
         }
@@ -133,7 +153,8 @@ impl CliCtx {
             PackageAddress::try_from_bech32(&self.address_decoder, &cmd.package_address).unwrap();
         let data = cmd.msg.as_bytes().to_vec();
 
-        println!("Message  : {}", cmd.msg);
+        println!("Package address : {}", cmd.package_address);
+        println!("Message         : {}", cmd.msg);
 
         // Build manifest
         let manifest = ManifestBuilder::new()
@@ -159,7 +180,7 @@ impl CliCtx {
         let sbor_data = hex::decode(output).unwrap();
 
         let hash: Hash = scrypto_decode(&sbor_data).unwrap();
-        println!("Message hash : {}", hash);
+        println!("Message hash    : {}", hash);
     }
 
     // Call CryptoScrypto package "bls12381_v1_verify" method to verify the signature
@@ -169,10 +190,11 @@ impl CliCtx {
             PackageAddress::try_from_bech32(&self.address_decoder, &cmd.package_address).unwrap();
         let msg_hash = keccak256_hash(cmd.msg.clone());
 
-        println!("Message      : {}", cmd.msg);
-        println!("Message hash : {}", msg_hash);
-        println!("Publick key  : {}", cmd.public_key);
-        println!("Signature    : {}", cmd.signature);
+        println!("Package address : {}", cmd.package_address);
+        println!("Message         : {}", cmd.msg);
+        println!("Message hash    : {}", msg_hash);
+        println!("Publick key     : {}", cmd.public_key);
+        println!("Signature       : {}", cmd.signature);
 
         let pub_key = Bls12381G1PublicKey::from_str(&cmd.public_key).unwrap();
         let signature = Bls12381G2Signature::from_str(&cmd.signature).unwrap();
@@ -203,6 +225,46 @@ impl CliCtx {
         let result: bool = scrypto_decode(&sbor_data).unwrap();
         println!("BLS verify  : {:?}", result);
     }
+
+    // Publish package using given *.wasm and *.rpd files
+    fn cmd_publish_package(&self, cmd: &PublishPackage) {
+        println!("WASM file: {}", cmd.code_path);
+        println!("RPD file : {}", cmd.rpd_path);
+        println!("Metadata : {}", cmd.metadata);
+
+        let mut metadata = BTreeMap::new();
+        metadata.insert(
+            "Description".to_string(),
+            MetadataValue::String(cmd.metadata.to_string()),
+        );
+        let code = fs::read(cmd.code_path.clone()).unwrap();
+        let rpd: PackageDefinition =
+            manifest_decode(&fs::read(cmd.rpd_path.clone()).unwrap()).unwrap();
+
+        // Build manifest
+        let manifest = ManifestBuilder::new()
+            .lock_fee_from_faucet()
+            .publish_package_advanced(None, code, rpd, metadata, OwnerRole::None)
+            .build();
+
+        let details = self.execute_transaction(manifest);
+        // Gateway returns the output of the called method in the second item of
+        // "transaction.receipt.output"
+        // more details: https://radix-babylon-gateway-api.redoc.ly/#operation/TransactionCommittedDetails
+        let output = details.get_output(1);
+
+        // The data is in an SBOR encode in hex string.
+        // We need to decode it:
+        // - first to raw SBOR (byte array)
+        // - then decode SBOR to the expected type
+        let sbor_data = hex::decode(output).unwrap();
+
+        let address: PackageAddress = scrypto_decode(&sbor_data).unwrap();
+
+        // Encode the address into human-readabl bech32 format
+        let address = self.address_encoder.encode(address.as_ref()).unwrap();
+        println!("Published package address  : {}", address);
+    }
 }
 
 pub fn run() {
@@ -219,6 +281,9 @@ pub fn run() {
         }
         Commands::BlsVerify(cmd) => {
             ctx.cmd_bls_verify(cmd);
+        }
+        Commands::PublishPackage(cmd) => {
+            ctx.cmd_publish_package(cmd);
         }
     }
 }
