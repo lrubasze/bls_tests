@@ -31,8 +31,19 @@ pub struct GatewayStatus {
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct ErrorDetails {
+    pub request_type: String,
+    pub current_sync_delay_seconds: u32,
+    pub max_allowed_sync_delay_seconds: u32,
+    pub r#type: String,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct TransactionSubmit {
-    pub duplicate: bool,
+    pub duplicate: Option<bool>,
+    pub message: Option<String>,
+    pub code: Option<u32>,
+    pub details: Option<ErrorDetails>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -146,6 +157,7 @@ impl GatewayApiClient {
             .unwrap()
             .text()
             .unwrap();
+
         let status: TransactionSubmit = serde_json::from_str(&resp).unwrap();
         status
     }
@@ -183,6 +195,7 @@ impl GatewayApiClient {
             .unwrap()
             .text()
             .unwrap();
+
         let status: TransactionDetails = serde_json::from_str(&resp).unwrap();
         status
     }

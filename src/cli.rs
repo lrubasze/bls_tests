@@ -199,8 +199,6 @@ impl CliCtx {
             manifest,
         );
 
-        let _ = self.gateway.transaction_submit(notarized_transaction);
-
         // Intent hash (unique identifier), which is often used
         // to query it's status in the gateway or in the dashboard.
         // It must be converted to Bech32 format before.
@@ -208,6 +206,15 @@ impl CliCtx {
         //   txid_tdx_21_14a9mm2e3fxyyh02wrz4xsalyxszez6kpqfh0a488hp8wjdvv55cq3wfzv0
         let intent_hash = self.hash_encoder.encode(&intent_hash).unwrap();
         println!("intent_hash : {}", intent_hash);
+
+        let submit = self.gateway.transaction_submit(notarized_transaction);
+        if let Some(message) = submit.message {
+            println!("Transaction submit error");
+            println!("message: {}", message);
+            println!("code: {:?}", submit.code.unwrap());
+            println!("details: {:?}", submit.details.unwrap());
+            panic!("")
+        }
 
         // Wait for transaction finish
         loop {
