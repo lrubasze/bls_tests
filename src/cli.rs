@@ -13,10 +13,10 @@ const NETWORK_HRP_SUFFIX: &str = "tdx_21_";
 const GATEWAY_URL: &str = "https://enkinet-gateway.radixdlt.com";
 
 // Mardunet network data
-//const NETWORK_ID: u8 = 0x24;
-//const NETWORK_NAME: &str = "mardunet";
-//const NETWORK_HRP_SUFFIX: &str = "tdx_24_";
-//const GATEWAY_URL: &str = "https://mardunet-gateway.radixdlt.com";
+const MARDUNET_NETWORK_ID: u8 = 0x24;
+const MARDUNET_NETWORK_NAME: &str = "mardunet";
+const MARDUNET_NETWORK_HRP_SUFFIX: &str = "tdx_24_";
+const MARDUNET_GATEWAY_URL: &str = "https://mardunet-gateway.radixdlt.com";
 
 const CRYPTO_SCRYPTO_BLUEPRINT_NAME: &str = "CryptoScrypto";
 
@@ -47,6 +47,9 @@ const CRYPTO_SCRYPTO_METADATA: &str = "CryptoScrypto package for Supra";
 /// - submitting the transaction to the network
 /// - getting the transaction output
 struct Cli {
+    #[arg(long, short, default_value_t = NETWORK_NAME.to_string())]
+    /// Switch to mardunet network
+    network: String,
     #[command(subcommand)]
     command: Commands,
 }
@@ -160,12 +163,25 @@ struct CliCtx {
 }
 
 impl CliCtx {
-    fn new() -> Self {
-        let gateway = GatewayApiClient::new(GATEWAY_URL);
-        let network_definition = NetworkDefinition {
-            id: NETWORK_ID,
-            logical_name: String::from(NETWORK_NAME),
-            hrp_suffix: String::from(NETWORK_HRP_SUFFIX),
+    fn new(network_name: &str) -> Self {
+        let (gateway, network_definition) = match network_name {
+            MARDUNET_NETWORK_NAME => (
+                GatewayApiClient::new(MARDUNET_GATEWAY_URL),
+                NetworkDefinition {
+                    id: MARDUNET_NETWORK_ID,
+                    logical_name: String::from(MARDUNET_NETWORK_NAME),
+                    hrp_suffix: String::from(MARDUNET_NETWORK_HRP_SUFFIX),
+                },
+            ),
+            NETWORK_NAME => (
+                GatewayApiClient::new(GATEWAY_URL),
+                NetworkDefinition {
+                    id: NETWORK_ID,
+                    logical_name: String::from(NETWORK_NAME),
+                    hrp_suffix: String::from(NETWORK_HRP_SUFFIX),
+                },
+            ),
+            _ => panic!("Network '{}' not supported", network_name),
         };
         let address_decoder = AddressBech32Decoder::new(&network_definition);
         let address_encoder = AddressBech32Encoder::new(&network_definition);
@@ -503,7 +519,7 @@ impl CliCtx {
 pub fn run() {
     let cli = Cli::parse();
 
-    let ctx = CliCtx::new();
+    let ctx = CliCtx::new(&cli.network);
 
     match &cli.command {
         Commands::GatewayStatus => {
