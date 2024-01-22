@@ -51,8 +51,14 @@ enum Commands {
     GatewayStatus,
     /// Calculate Keccak256 hash over given message
     KeccakHash(KeccakHash),
-    /// Perform BLS verification over given message, public key and signature
+    /// Perform BLS verification over Keccak256 hash from given message, public key and signature
     BlsVerify(BlsVerify),
+    /// Perform BLS aggregate verification over given messages, public keys and signature
+    BlsAggregateVerify(BlsAggregateVerify),
+    /// Perform BLS aggregate verification over given message, public keys and signature
+    BlsFastAggregateVerify(BlsFastAggregateVerify),
+    /// Perform BLS signature aggregation
+    BlsSignatureAggregate(BlsSignatureAggregate),
     /// Publish given WASM and RPD files as a package
     PublishPackage(PublishPackage),
 }
@@ -81,6 +87,48 @@ struct BlsVerify {
     /// BLS signature to verify (hex-encoded string)
     #[arg(long, short, default_value_t = TEST_SIGNATURE.to_string())]
     signature: String,
+}
+
+#[derive(Debug, Parser)]
+struct BlsAggregateVerify {
+    #[arg(long, short = 'a', default_value_t = CRYPTO_SCRYPTO_PACKAGE_ADDRESS.to_string())]
+    /// Package address of the CryptoScrypto blueprint
+    package_address: String,
+    #[arg(long, short, use_value_delimiter = true, value_delimiter = ',', default_values_t = vec![TEST_MSG.to_string()])]
+    /// Messages to verify signature with (it will be hashed before with Keccak256)
+    msgs: Vec<String>,
+    #[arg(long, short, use_value_delimiter = true, value_delimiter = ',', default_values_t = vec![TEST_PUB_KEY.to_string()])]
+    /// BLS public key to perform verification (hex-encoded string)
+    public_keys: Vec<String>,
+    /// BLS signature to verify (hex-encoded string)
+    #[arg(long, short, default_value_t = TEST_SIGNATURE.to_string())]
+    signature: String,
+}
+
+#[derive(Debug, Parser)]
+struct BlsFastAggregateVerify {
+    #[arg(long, short = 'a', default_value_t = CRYPTO_SCRYPTO_PACKAGE_ADDRESS.to_string())]
+    /// Package address of the CryptoScrypto blueprint
+    package_address: String,
+    #[arg(long, short, default_value_t = TEST_MSG.to_string())]
+    /// Message to verify signature with (it will be hashed before with Keccak256)
+    msg: String,
+    #[arg(long, short, use_value_delimiter = true, value_delimiter = ',', default_values_t = vec![TEST_PUB_KEY.to_string()])]
+    /// BLS public key to perform verification (hex-encoded string)
+    public_keys: Vec<String>,
+    /// BLS signature to verify (hex-encoded string)
+    #[arg(long, short, default_value_t = TEST_SIGNATURE.to_string())]
+    signature: String,
+}
+
+#[derive(Debug, Parser)]
+struct BlsSignatureAggregate {
+    #[arg(long, short = 'a', default_value_t = CRYPTO_SCRYPTO_PACKAGE_ADDRESS.to_string())]
+    /// Package address of the CryptoScrypto blueprint
+    package_address: String,
+    /// BLS signatures to aggregate (hex-encoded string)
+    #[arg(long, short, use_value_delimiter = true, value_delimiter = ',', default_values_t = vec![TEST_SIGNATURE.to_string()])]
+    signatures: Vec<String>,
 }
 
 #[derive(Debug, Parser)]
@@ -191,16 +239,19 @@ impl CliCtx {
         // Gateway returns the output of the called method in the second item of
         // "transaction.receipt.output"
         // more details: https://radix-babylon-gateway-api.redoc.ly/#operation/TransactionCommittedDetails
-        let output = details.get_output(1);
+        if let Some(output) = details.get_output(1) {
+            // The data is in an SBOR encode in hex string.
+            // We need to decode it:
+            // - first to raw SBOR (byte array)
+            // - then decode SBOR to the expected type
+            let sbor_data = hex::decode(output).unwrap();
 
-        // The data is in an SBOR encode in hex string.
-        // We need to decode it:
-        // - first to raw SBOR (byte array)
-        // - then decode SBOR to the expected type
-        let sbor_data = hex::decode(output).unwrap();
-
-        let hash: Hash = scrypto_decode(&sbor_data).unwrap();
-        println!("Message hash    : {}", hash);
+            let hash: Hash = scrypto_decode(&sbor_data).unwrap();
+            println!("Message hash    : {}", hash);
+        } else {
+            let error = details.get_error().unwrap();
+            println!("Transaction error: {:?}", error);
+        }
     }
 
     // Call CryptoScrypto package "bls12381_v1_verify" method to verify the signature
@@ -234,16 +285,19 @@ impl CliCtx {
         // Gateway returns the output of the called method in the second item of
         // "transaction.receipt.output"
         // more details: https://radix-babylon-gateway-api.redoc.ly/#operation/TransactionCommittedDetails
-        let output = details.get_output(1);
+        if let Some(output) = details.get_output(1) {
+            // The data is in an SBOR encode in hex string.
+            // We need to decode it:
+            // - first to raw SBOR (byte array)
+            // - then decode SBOR to the expected type
+            let sbor_data = hex::decode(output).unwrap();
 
-        // The data is in an SBOR encode in hex string.
-        // We need to decode it:
-        // - first to raw SBOR (byte array)
-        // - then decode SBOR to the expected type
-        let sbor_data = hex::decode(output).unwrap();
-
-        let result: bool = scrypto_decode(&sbor_data).unwrap();
-        println!("BLS verify  : {:?}", result);
+            let result: bool = scrypto_decode(&sbor_data).unwrap();
+            println!("BLS verify  : {:?}", result);
+        } else {
+            let error = details.get_error().unwrap();
+            println!("Transaction error: {:?}", error);
+        }
     }
 
     // Publish package using given *.wasm and *.rpd files
@@ -271,19 +325,165 @@ impl CliCtx {
         // Gateway returns the output of the called method in the second item of
         // "transaction.receipt.output"
         // more details: https://radix-babylon-gateway-api.redoc.ly/#operation/TransactionCommittedDetails
-        let output = details.get_output(1);
+        if let Some(output) = details.get_output(1) {
+            // The data is in an SBOR encode in hex string.
+            // We need to decode it:
+            // - first to raw SBOR (byte array)
+            // - then decode SBOR to the expected type
+            let sbor_data = hex::decode(output).unwrap();
 
-        // The data is in an SBOR encode in hex string.
-        // We need to decode it:
-        // - first to raw SBOR (byte array)
-        // - then decode SBOR to the expected type
-        let sbor_data = hex::decode(output).unwrap();
+            let address: PackageAddress = scrypto_decode(&sbor_data).unwrap();
 
-        let address: PackageAddress = scrypto_decode(&sbor_data).unwrap();
+            // Encode the address into human-readabl bech32 format
+            let address = self.address_encoder.encode(address.as_ref()).unwrap();
+            println!("Published package address  : {}", address);
+        } else {
+            let error = details.get_error().unwrap();
+            println!("Transaction error: {:?}", error);
+        }
+    }
 
-        // Encode the address into human-readabl bech32 format
-        let address = self.address_encoder.encode(address.as_ref()).unwrap();
-        println!("Published package address  : {}", address);
+    fn cmd_bls_aggregate_verify(&self, cmd: &BlsAggregateVerify) {
+        // Convert address from the human-readable bech32 format
+        let package_address =
+            PackageAddress::try_from_bech32(&self.address_decoder, &cmd.package_address).unwrap();
+
+        println!("Package address : {}", cmd.package_address);
+        println!("Messages        : {:?}", cmd.msgs);
+        println!("Public  keys    : {:?}", cmd.public_keys);
+        println!("Signature       : {:?}", cmd.signature);
+
+        let pub_keys_msgs: Vec<(Bls12381G1PublicKey, Vec<u8>)> = cmd
+            .public_keys
+            .iter()
+            .zip(cmd.msgs.clone())
+            .map(|(pk, msg)| (Bls12381G1PublicKey::from_str(pk).unwrap(), msg.into_bytes()))
+            .collect();
+
+        let signature = Bls12381G2Signature::from_str(&cmd.signature).unwrap();
+
+        // Build manifest
+        let manifest = ManifestBuilder::new()
+            .lock_fee_from_faucet()
+            .call_function(
+                package_address,
+                CRYPTO_SCRYPTO_BLUEPRINT_NAME,
+                "bls12381_v1_aggregate_verify",
+                manifest_args!(pub_keys_msgs, signature),
+            )
+            .build();
+
+        let details = self.execute_transaction(manifest);
+        // Gateway returns the output of the called method in the second item of
+        // "transaction.receipt.output"
+        // more details: https://radix-babylon-gateway-api.redoc.ly/#operation/TransactionCommittedDetails
+        if let Some(output) = details.get_output(1) {
+            // The data is in an SBOR encode in hex string.
+            // We need to decode it:
+            // - first to raw SBOR (byte array)
+            // - then decode SBOR to the expected type
+            let sbor_data = hex::decode(output).unwrap();
+
+            let result: bool = scrypto_decode(&sbor_data).unwrap();
+            println!("BLS aggregate verify  : {:?}", result);
+        } else {
+            let error = details.get_error().unwrap();
+            println!("Transaction error: {:?}", error);
+        }
+    }
+
+    fn cmd_bls_fast_aggregate_verify(&self, cmd: &BlsFastAggregateVerify) {
+        // Convert address from the human-readable bech32 format
+        let package_address =
+            PackageAddress::try_from_bech32(&self.address_decoder, &cmd.package_address).unwrap();
+
+        println!("Package address : {}", cmd.package_address);
+        println!("Message         : {:?}", cmd.msg);
+        println!("Public keys     : {:?}", cmd.public_keys);
+        println!("Signature       : {:?}", cmd.signature);
+
+        let msg = cmd.msg.clone().into_bytes();
+        let pub_keys: Vec<Bls12381G1PublicKey> = cmd
+            .public_keys
+            .iter()
+            .map(|pk| Bls12381G1PublicKey::from_str(pk).unwrap())
+            .collect();
+
+        let signature = Bls12381G2Signature::from_str(&cmd.signature).unwrap();
+
+        // Build manifest
+        let manifest = ManifestBuilder::new()
+            .lock_fee_from_faucet()
+            .call_function(
+                package_address,
+                CRYPTO_SCRYPTO_BLUEPRINT_NAME,
+                "bls12381_v1_fast_aggregate_verify",
+                manifest_args!(msg, pub_keys, signature),
+            )
+            .build();
+
+        let details = self.execute_transaction(manifest);
+        // Gateway returns the output of the called method in the second item of
+        // "transaction.receipt.output"
+        // more details: https://radix-babylon-gateway-api.redoc.ly/#operation/TransactionCommittedDetails
+
+        if let Some(output) = details.get_output(1) {
+            // The data is in an SBOR encode in hex string.
+            // We need to decode it:
+            // - first to raw SBOR (byte array)
+            // - then decode SBOR to the expected type
+            let sbor_data = hex::decode(output).unwrap();
+
+            let result: bool = scrypto_decode(&sbor_data).unwrap();
+            println!("BLS fast aggregate verify  : {:?}", result);
+        } else {
+            let error = details.get_error().unwrap();
+            println!("Transaction error: {:?}", error);
+        }
+    }
+
+    fn cmd_bls_signature_aggregate(&self, cmd: &BlsSignatureAggregate) {
+        // Convert address from the human-readable bech32 format
+        let package_address =
+            PackageAddress::try_from_bech32(&self.address_decoder, &cmd.package_address).unwrap();
+
+        println!("Package address : {}", cmd.package_address);
+        println!("Signatures      : {:?}", cmd.signatures);
+
+        let signatures: Vec<Bls12381G2Signature> = cmd
+            .signatures
+            .iter()
+            .map(|s| Bls12381G2Signature::from_str(s).unwrap())
+            .collect();
+
+        // Build manifest
+        let manifest = ManifestBuilder::new()
+            .lock_fee_from_faucet()
+            .call_function(
+                package_address,
+                CRYPTO_SCRYPTO_BLUEPRINT_NAME,
+                "bls12381_g2_signature_aggregate",
+                manifest_args!(signatures),
+            )
+            .build();
+
+        let details = self.execute_transaction(manifest);
+        // Gateway returns the output of the called method in the second item of
+        // "transaction.receipt.output"
+        // more details: https://radix-babylon-gateway-api.redoc.ly/#operation/TransactionCommittedDetails
+        if let Some(output) = details.get_output(1) {
+            // The data is in an SBOR encode in hex string.
+            // We need to decode it:
+            // - first to raw SBOR (byte array)
+            // - then decode SBOR to the expected type
+            let sbor_data = hex::decode(output).unwrap();
+
+            let result: bool = scrypto_decode(&sbor_data).unwrap();
+            println!("BLS signature aggregate  : {:?}", result);
+        } else {
+            let error = details.get_error().unwrap();
+            println!("Transaction error: {:?}", error);
+        }
     }
 }
 
@@ -301,6 +501,15 @@ pub fn run() {
         }
         Commands::BlsVerify(cmd) => {
             ctx.cmd_bls_verify(cmd);
+        }
+        Commands::BlsAggregateVerify(cmd) => {
+            ctx.cmd_bls_aggregate_verify(cmd);
+        }
+        Commands::BlsFastAggregateVerify(cmd) => {
+            ctx.cmd_bls_fast_aggregate_verify(cmd);
+        }
+        Commands::BlsSignatureAggregate(cmd) => {
+            ctx.cmd_bls_signature_aggregate(cmd);
         }
         Commands::PublishPackage(cmd) => {
             ctx.cmd_publish_package(cmd);
