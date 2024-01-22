@@ -12,6 +12,12 @@ const NETWORK_NAME: &str = "enkinet";
 const NETWORK_HRP_SUFFIX: &str = "tdx_21_";
 const GATEWAY_URL: &str = "https://enkinet-gateway.radixdlt.com";
 
+// Mardunet network data
+//const NETWORK_ID: u8 = 0x24;
+//const NETWORK_NAME: &str = "mardunet";
+//const NETWORK_HRP_SUFFIX: &str = "tdx_24_";
+//const GATEWAY_URL: &str = "https://mardunet-gateway.radixdlt.com";
+
 const CRYPTO_SCRYPTO_BLUEPRINT_NAME: &str = "CryptoScrypto";
 
 // This is the package address of the published CryptoScrypto blueprint.
