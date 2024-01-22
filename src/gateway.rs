@@ -2,20 +2,20 @@ use reqwest::{blocking, header::*};
 use serde::{Deserialize, Serialize};
 use transaction::prelude::*;
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct GatewayApiClient {
     url: String,
     client: blocking::Client,
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct ReleaseInfo {
     pub release_version: String,
     pub open_api_schema_version: String,
     pub image_tag: String,
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct LedgerState {
     pub network: String,
     pub state_version: u32,
@@ -24,18 +24,18 @@ pub struct LedgerState {
     pub round: u64,
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct GatewayStatus {
     pub ledger_state: LedgerState,
     pub release_info: ReleaseInfo,
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct TransactionSubmit {
     pub duplicate: bool,
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct KnownPayloads {
     pub payload_hash: String,
     pub status: String,
@@ -45,7 +45,7 @@ pub struct KnownPayloads {
     pub handling_status_reason: String,
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct TransactionStatus {
     pub status: String,
     pub intent_status: String,
@@ -54,19 +54,20 @@ pub struct TransactionStatus {
     pub known_payloads: Vec<KnownPayloads>,
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct TransactionOutput {
     pub hex: String,
     pub programmatic_json: Option<String>,
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct TransactionReceipt {
     pub status: String,
-    pub output: Vec<TransactionOutput>,
+    pub output: Option<Vec<TransactionOutput>>,
+    pub error_message: Option<String>,
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct TransactionDetailsStatus {
     pub transaction_status: String,
     pub state_version: u32,
@@ -87,14 +88,17 @@ pub struct TransactionDetails {
 }
 
 impl TransactionDetails {
-    pub fn get_output(&self, idx: usize) -> String {
+    pub fn get_output(&self, idx: usize) -> Option<String> {
         self.transaction
             .receipt
             .output
+            .clone()?
             .get(idx)
-            .unwrap()
-            .hex
-            .clone()
+            .map(|t| t.hex.clone())
+    }
+
+    pub fn get_error(&self) -> Option<String> {
+        self.transaction.receipt.error_message.clone()
     }
 }
 
