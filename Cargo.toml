@@ -1,13 +1,13 @@
 [package]
-name = "bls_for_supra"
+name = "bls_tests"
 version = "0.1.0"
 edition = "2021"
 
 [dependencies]
 # Radix Engine deps
-scrypto = { git = "https://github.com/radixdlt/radixdlt-scrypto", rev = "206d65b05a98e4d2f8476dc73bb3fae9348c2fc7", features = ["serde"] }
-transaction = { git = "https://github.com/radixdlt/radixdlt-scrypto", rev = "206d65b05a98e4d2f8476dc73bb3fae9348c2fc7" }
-sbor = { git = "https://github.com/radixdlt/radixdlt-scrypto", rev = "206d65b05a98e4d2f8476dc73bb3fae9348c2fc7" }
+scrypto = { git = "https://github.com/radixdlt/radixdlt-scrypto", rev = "74150e5590043d446ff19290d0fc34321c96d788", features = ["serde"] }
+transaction = { git = "https://github.com/radixdlt/radixdlt-scrypto", rev = "74150e5590043d446ff19290d0fc34321c96d788" }
+sbor = { git = "https://github.com/radixdlt/radixdlt-scrypto", rev = "74150e5590043d446ff19290d0fc34321c96d788" }
 
 # CLI
 clap = { version = "4.4.11", features = ["derive"] }
