@@ -5,9 +5,9 @@ edition = "2021"
 
 [dependencies]
 # Radix Engine deps
-scrypto = { git = "https://github.com/radixdlt/radixdlt-scrypto", rev = "74150e5590043d446ff19290d0fc34321c96d788", features = ["serde"] }
-transaction = { git = "https://github.com/radixdlt/radixdlt-scrypto", rev = "74150e5590043d446ff19290d0fc34321c96d788" }
-sbor = { git = "https://github.com/radixdlt/radixdlt-scrypto", rev = "74150e5590043d446ff19290d0fc34321c96d788" }
+scrypto = { git = "https://github.com/radixdlt/radixdlt-scrypto", tag = "anemone-ea13991188", features = ["serde"] }
+transaction = { git = "https://github.com/radixdlt/radixdlt-scrypto", tag = "anemone-ea13991188" }
+sbor = { git = "https://github.com/radixdlt/radixdlt-scrypto", tag = "anemone-ea13991188" }
 
 # CLI
 clap = { version = "4.4.11", features = ["derive"] }
