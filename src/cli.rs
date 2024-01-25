@@ -23,7 +23,7 @@ const CRYPTO_SCRYPTO_BLUEPRINT_NAME: &str = "CryptoScrypto";
 // This is the package address of the published CryptoScrypto blueprint.
 // If you publish it by yourself you can use the new adress as well.
 const CRYPTO_SCRYPTO_PACKAGE_ADDRESS: &str =
-    "package_tdx_21_1pkt7zdllsneytdc9g60xn9jjhhwx7jaqxmeh58l4dwyx7rt5z9428f";
+    "package_tdx_21_1p5hg2nmhxthzz8hdhqaclx376pq77yv8zfagq6h9hxk6tw5sdmx090";
 
 const TEST_MSG1: &str = "Hello World!";
 const TEST_MSG2: &str = "Goodbye World!";
@@ -237,24 +237,28 @@ impl CliCtx {
         let intent_hash = self.hash_encoder.encode(&intent_hash).unwrap();
         println!("intent_hash : {}", intent_hash);
 
-        let submit = self.gateway.transaction_submit(notarized_transaction);
-        if let Some(message) = submit.message {
-            println!("Transaction submit error");
-            println!("message: {}", message);
-            println!("code: {:?}", submit.code.unwrap());
-            println!("details: {:?}", submit.details.unwrap());
-            panic!("")
+        if let Err(err) = self.gateway.transaction_submit(notarized_transaction) {
+            panic!("transaction submit error: {:?}", err);
         }
 
         // Wait for transaction finish
         loop {
             let status = self.gateway.transaction_status(&intent_hash);
-            if !status.status.eq("Pending") {
-                break;
+            match status {
+                Ok(status) => {
+                    if !status.status.eq("Pending") {
+                        break;
+                    }
+                }
+                Err(err) => panic!("transaction status error: {:?}", err),
             }
             thread::sleep(time::Duration::from_millis(1000));
         }
-        self.gateway.transaction_details(&intent_hash)
+
+        match self.gateway.transaction_details(&intent_hash) {
+            Ok(details) => details,
+            Err(err) => panic!("transaction submit error: {:?}", err),
+        }
     }
 
     // Call CryptoScrypto package "keccak256_hash" method to retrieve the digest of the message.
