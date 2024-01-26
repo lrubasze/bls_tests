@@ -1,3 +1,4 @@
+use crate::gateway::*;
 use transaction::prelude::*;
 
 pub fn create_notarized_transaction(
@@ -26,4 +27,20 @@ pub fn create_notarized_transaction(
     let intent_hash = transaction.prepare().unwrap().intent_hash();
 
     (transaction, intent_hash)
+}
+
+pub fn transaction_output(details: TransactionDetails) -> Vec<u8> {
+    // Gateway returns the output of the called method in the second item of
+    // "transaction.receipt.output"
+    // more details: https://radix-babylon-gateway-api.redoc.ly/#operation/TransactionCommittedDetails
+    if let Some(output) = details.get_output(1) {
+        // The data is in an SBOR encode in hex string.
+        // We need to decode it:
+        // - first to raw SBOR (byte array)
+        // - then decode SBOR to the expected type
+        hex::decode(output).unwrap()
+    } else {
+        let error = details.get_error().unwrap();
+        panic!("Transaction error: {:?}", error);
+    }
 }

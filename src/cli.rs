@@ -84,6 +84,8 @@ enum Commands {
     BlsSignatureAggregate(BlsSignatureAggregate),
     /// Publish given WASM and RPD files as a package
     PublishPackage(PublishPackage),
+    /// Free XRD from faucet to destination account address
+    FreeXrd(FreeXrd),
 }
 
 #[derive(Debug, Parser)]
@@ -165,6 +167,12 @@ struct PublishPackage {
     #[arg(long, short, default_value_t = CRYPTO_SCRYPTO_METADATA.to_string())]
     /// Package metadata to set for 'Description' key
     metadata: String,
+}
+
+#[derive(Debug, Parser)]
+struct FreeXrd {
+    /// Account address where to free some XRD
+    account_address: String,
 }
 
 struct CliCtx {
@@ -284,22 +292,8 @@ impl CliCtx {
             .build();
 
         let details = self.execute_transaction(manifest);
-        // Gateway returns the output of the called method in the second item of
-        // "transaction.receipt.output"
-        // more details: https://radix-babylon-gateway-api.redoc.ly/#operation/TransactionCommittedDetails
-        if let Some(output) = details.get_output(1) {
-            // The data is in an SBOR encode in hex string.
-            // We need to decode it:
-            // - first to raw SBOR (byte array)
-            // - then decode SBOR to the expected type
-            let sbor_data = hex::decode(output).unwrap();
-
-            let hash: Hash = scrypto_decode(&sbor_data).unwrap();
-            println!("Message hash    : {}", hash);
-        } else {
-            let error = details.get_error().unwrap();
-            println!("Transaction error: {:?}", error);
-        }
+        let value: Hash = scrypto_decode(&transaction_output(details)).unwrap();
+        println!("Message hash    : {}", value);
     }
 
     // Call CryptoScrypto package "bls12381_v1_verify" method to verify the signature
@@ -331,22 +325,8 @@ impl CliCtx {
             .build();
 
         let details = self.execute_transaction(manifest);
-        // Gateway returns the output of the called method in the second item of
-        // "transaction.receipt.output"
-        // more details: https://radix-babylon-gateway-api.redoc.ly/#operation/TransactionCommittedDetails
-        if let Some(output) = details.get_output(1) {
-            // The data is in an SBOR encode in hex string.
-            // We need to decode it:
-            // - first to raw SBOR (byte array)
-            // - then decode SBOR to the expected type
-            let sbor_data = hex::decode(output).unwrap();
-
-            let result: bool = scrypto_decode(&sbor_data).unwrap();
-            println!("BLS verify  : {:?}", result);
-        } else {
-            let error = details.get_error().unwrap();
-            println!("Transaction error: {:?}", error);
-        }
+        let value: bool = scrypto_decode(&transaction_output(details)).unwrap();
+        println!("BLS verify  : {:?}", value);
     }
 
     // Publish package using given *.wasm and *.rpd files
@@ -371,25 +351,30 @@ impl CliCtx {
             .build();
 
         let details = self.execute_transaction(manifest);
-        // Gateway returns the output of the called method in the second item of
-        // "transaction.receipt.output"
-        // more details: https://radix-babylon-gateway-api.redoc.ly/#operation/TransactionCommittedDetails
-        if let Some(output) = details.get_output(1) {
-            // The data is in an SBOR encode in hex string.
-            // We need to decode it:
-            // - first to raw SBOR (byte array)
-            // - then decode SBOR to the expected type
-            let sbor_data = hex::decode(output).unwrap();
+        let value: PackageAddress = scrypto_decode(&transaction_output(details)).unwrap();
+        // Encode the address into human-readabl bech32 format
+        let address = self.address_encoder.encode(value.as_ref()).unwrap();
+        println!("Published package address  : {:?}", address);
+    }
 
-            let address: PackageAddress = scrypto_decode(&sbor_data).unwrap();
+    // Free some XRDs to given account
+    fn cmd_free_xrd(&self, cmd: &FreeXrd) {
+        // Convert address from the human-readable bech32 format
+        let account_address =
+            ComponentAddress::try_from_bech32(&self.address_decoder, &cmd.account_address)
+                .expect("Invalid package address");
+        println!("Account address: {}", cmd.account_address);
 
-            // Encode the address into human-readabl bech32 format
-            let address = self.address_encoder.encode(address.as_ref()).unwrap();
-            println!("Published package address  : {}", address);
-        } else {
-            let error = details.get_error().unwrap();
-            println!("Transaction error: {:?}", error);
-        }
+        // Build manifest
+        let manifest = ManifestBuilder::new()
+            .lock_fee_from_faucet()
+            .get_free_xrd_from_faucet()
+            .try_deposit_entire_worktop_or_abort(account_address, None)
+            .build();
+
+        let details = self.execute_transaction(manifest);
+        let _ = transaction_output(details);
+        println!("XRD freed to address: {:?}", cmd.account_address);
     }
 
     fn cmd_bls_aggregate_verify(&self, cmd: &BlsAggregateVerify) {
@@ -424,22 +409,8 @@ impl CliCtx {
             .build();
 
         let details = self.execute_transaction(manifest);
-        // Gateway returns the output of the called method in the second item of
-        // "transaction.receipt.output"
-        // more details: https://radix-babylon-gateway-api.redoc.ly/#operation/TransactionCommittedDetails
-        if let Some(output) = details.get_output(1) {
-            // The data is in an SBOR encode in hex string.
-            // We need to decode it:
-            // - first to raw SBOR (byte array)
-            // - then decode SBOR to the expected type
-            let sbor_data = hex::decode(output).unwrap();
-
-            let result: bool = scrypto_decode(&sbor_data).unwrap();
-            println!("BLS aggregate verify  : {:?}", result);
-        } else {
-            let error = details.get_error().unwrap();
-            println!("Transaction error: {:?}", error);
-        }
+        let value: bool = scrypto_decode(&transaction_output(details)).unwrap();
+        println!("BLS aggregate verify  : {:?}", value);
     }
 
     fn cmd_bls_fast_aggregate_verify(&self, cmd: &BlsFastAggregateVerify) {
@@ -474,23 +445,8 @@ impl CliCtx {
             .build();
 
         let details = self.execute_transaction(manifest);
-        // Gateway returns the output of the called method in the second item of
-        // "transaction.receipt.output"
-        // more details: https://radix-babylon-gateway-api.redoc.ly/#operation/TransactionCommittedDetails
-
-        if let Some(output) = details.get_output(1) {
-            // The data is in an SBOR encode in hex string.
-            // We need to decode it:
-            // - first to raw SBOR (byte array)
-            // - then decode SBOR to the expected type
-            let sbor_data = hex::decode(output).unwrap();
-
-            let result: bool = scrypto_decode(&sbor_data).unwrap();
-            println!("BLS fast aggregate verify  : {:?}", result);
-        } else {
-            let error = details.get_error().unwrap();
-            println!("Transaction error: {:?}", error);
-        }
+        let value: bool = scrypto_decode(&transaction_output(details)).unwrap();
+        println!("BLS fast aggregate verify  : {:?}", value);
     }
 
     fn cmd_bls_signature_aggregate(&self, cmd: &BlsSignatureAggregate) {
@@ -520,28 +476,13 @@ impl CliCtx {
             .build();
 
         let details = self.execute_transaction(manifest);
-        // Gateway returns the output of the called method in the second item of
-        // "transaction.receipt.output"
-        // more details: https://radix-babylon-gateway-api.redoc.ly/#operation/TransactionCommittedDetails
-        if let Some(output) = details.get_output(1) {
-            // The data is in an SBOR encode in hex string.
-            // We need to decode it:
-            // - first to raw SBOR (byte array)
-            // - then decode SBOR to the expected type
-            let sbor_data = hex::decode(output).unwrap();
-
-            let result: Bls12381G2Signature = scrypto_decode(&sbor_data).unwrap();
-            println!("BLS signature aggregate  : {:?}", result);
-        } else {
-            let error = details.get_error().unwrap();
-            println!("Transaction error: {:?}", error);
-        }
+        let value: Bls12381G2Signature = scrypto_decode(&transaction_output(details)).unwrap();
+        println!("BLS signature aggregate  : {:?}", value);
     }
 }
 
 pub fn run() {
     let cli = Cli::parse();
-
     let ctx = CliCtx::new(&cli.network);
 
     match &cli.command {
@@ -565,6 +506,9 @@ pub fn run() {
         }
         Commands::PublishPackage(cmd) => {
             ctx.cmd_publish_package(cmd);
+        }
+        Commands::FreeXrd(cmd) => {
+            ctx.cmd_free_xrd(cmd);
         }
     }
 }
